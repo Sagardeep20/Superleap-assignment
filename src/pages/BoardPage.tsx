@@ -7,6 +7,7 @@ import {
   PointerSensor,
   useSensor,
   useSensors,
+  useDroppable,
 } from "@dnd-kit/core";
 import type { DragStartEvent, DragEndEvent } from "@dnd-kit/core";
 import { sortableKeyboardCoordinates } from "@dnd-kit/sortable";
@@ -32,27 +33,68 @@ const COLUMNS: { id: LeadStatus; title: string; color: string }[] = [
   { id: "LOST", title: "LOST", color: "bg-red-100" },
 ];
 
+function Column({
+  id,
+  title,
+  color,
+  leads,
+  onView,
+  onEdit,
+  onDelete,
+}: {
+  id: LeadStatus;
+  title: string;
+  color: string;
+  leads: Lead[];
+  onView: (lead: Lead) => void;
+  onEdit: (lead: Lead) => void;
+  onDelete: (lead: Lead) => void;
+}) {
+  const { setNodeRef, isOver } = useDroppable({ id });
+  const locked = isTerminal(id);
+
+  return (
+    <div className="flex flex-col">
+      <div className={`rounded-t-lg p-3 ${color}`}>
+        <div className="flex items-center justify-between">
+          <h3 className="font-semibold text-sm">{title}</h3>
+          <span className="text-xs bg-white/50 px-2 py-0.5 rounded-full">
+            {leads.length}
+          </span>
+        </div>
+      </div>
+      <div
+        ref={setNodeRef}
+        className={`
+          flex-1 bg-muted/30 rounded-b-lg p-2 min-h-[400px] max-h-[70vh] overflow-y-auto
+          ${locked ? "opacity-60" : ""}
+          ${isOver && !locked ? "ring-2 ring-primary ring-inset bg-primary/10" : ""}
+        `}
+      >
+        {leads.map((lead) => (
+          <LeadCard
+            key={lead.id}
+            lead={lead}
+            onView={onView}
+            onEdit={onEdit}
+            onDelete={onDelete}
+          />
+        ))}
+        {leads.length === 0 && (
+          <p className="text-xs text-muted-foreground text-center py-4">
+            Drop leads here
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export function BoardPage() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { searchQuery, selectedStatus, setSearchQuery, setSelectedStatus, reset } = useFilterStore();
 
-  useEffect(() => {
-    const q = searchParams.get("q");
-    const status = searchParams.get("status");
-    if (q !== null) setSearchQuery(q);
-    if (status !== null && (status === "ALL" || COLUMNS.some(c => c.id === status))) {
-      setSelectedStatus(status as LeadStatus | "ALL");
-    }
-  }, []);
-
-  useEffect(() => {
-    const params = new URLSearchParams();
-    if (searchQuery) params.set("q", searchQuery);
-    if (selectedStatus !== "ALL") params.set("status", selectedStatus);
-    setSearchParams(params, { replace: true });
-  }, [searchQuery, selectedStatus]);
-  
   const { data: leads, isLoading, isError, refetch } = useLeadsQuery();
   const patchStatus = usePatchLeadStatus();
 
@@ -72,6 +114,22 @@ export function BoardPage() {
       coordinateGetter: sortableKeyboardCoordinates,
     })
   );
+
+  useEffect(() => {
+    const q = searchParams.get("q");
+    const status = searchParams.get("status");
+    if (q !== null) setSearchQuery(q);
+    if (status !== null && (status === "ALL" || COLUMNS.some(c => c.id === status))) {
+      setSelectedStatus(status as LeadStatus | "ALL");
+    }
+  }, []);
+
+  useEffect(() => {
+    const params = new URLSearchParams();
+    if (searchQuery) params.set("q", searchQuery);
+    if (selectedStatus !== "ALL") params.set("status", selectedStatus);
+    setSearchParams(params, { replace: true });
+  }, [searchQuery, selectedStatus]);
 
   const filteredLeads = useMemo(() => {
     if (!leads) return [];
@@ -97,18 +155,30 @@ export function BoardPage() {
     const { active, over } = event;
     setActiveLead(null);
 
-    if (!over) return;
+    if (!over) {
+      toast.error("Drop on a valid column");
+      return;
+    }
 
     const leadId = active.id as string;
     const newStatus = over.id as LeadStatus;
 
+    if (!COLUMNS.some(c => c.id === newStatus)) {
+      toast.error("Invalid drop target");
+      return;
+    }
+
     const lead = leads?.find((l) => l.id === leadId);
     if (!lead) return;
+
+    if (lead.status === newStatus) {
+      return;
+    }
 
     const validTransitions = getValidTransitions(lead.status);
     
     if (!validTransitions.includes(newStatus)) {
-      toast.error(`Invalid transition from ${lead.status} to ${newStatus}`);
+      toast.error(`Invalid transition: ${lead.status} → ${newStatus}`);
       return;
     }
 
@@ -211,45 +281,18 @@ export function BoardPage() {
           onDragEnd={handleDragEnd}
         >
           <div className="grid grid-cols-5 gap-4">
-            {COLUMNS.map((column) => {
-              const columnLeads = getLeadsByStatus(column.id);
-              const locked = isTerminal(column.id);
-
-              return (
-                <div key={column.id} className="flex flex-col">
-                  <div className={`rounded-t-lg p-3 ${column.color}`}>
-                    <div className="flex items-center justify-between">
-                      <h3 className="font-semibold text-sm">{column.title}</h3>
-                      <span className="text-xs bg-white/50 px-2 py-0.5 rounded-full">
-                        {columnLeads.length}
-                      </span>
-                    </div>
-                  </div>
-                  <div
-                    className={`
-                      flex-1 bg-muted/30 rounded-b-lg p-2 min-h-[400px] max-h-[70vh] overflow-y-auto
-                      ${locked ? "opacity-60" : ""}
-                    `}
-                    data-status={column.id}
-                  >
-                    {columnLeads.map((lead) => (
-                      <LeadCard
-                        key={lead.id}
-                        lead={lead}
-                        onView={handleViewClick}
-                        onEdit={handleEditClick}
-                        onDelete={handleDeleteClick}
-                      />
-                    ))}
-                    {columnLeads.length === 0 && (
-                      <p className="text-xs text-muted-foreground text-center py-4">
-                        No leads
-                      </p>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
+            {COLUMNS.map((column) => (
+              <Column
+                key={column.id}
+                id={column.id}
+                title={column.title}
+                color={column.color}
+                leads={getLeadsByStatus(column.id)}
+                onView={handleViewClick}
+                onEdit={handleEditClick}
+                onDelete={handleDeleteClick}
+              />
+            ))}
           </div>
 
           <DragOverlay>
