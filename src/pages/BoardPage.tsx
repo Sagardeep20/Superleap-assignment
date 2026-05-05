@@ -196,8 +196,9 @@ export function BoardPage() {
       return;
     }
 
-    if (isTerminal(newStatus)) {
-      toast.error(`Cannot transition to ${newStatus} - status is locked`);
+    // If current status is terminal, can't change it
+    if (isTerminal(lead.status)) {
+      toast.error(`Cannot change status - lead is locked`);
       return;
     }
 
