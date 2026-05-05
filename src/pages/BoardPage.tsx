@@ -156,20 +156,34 @@ export function BoardPage() {
     setActiveLead(null);
 
     if (!over) {
-      toast.error("Drop on a valid column");
       return;
     }
 
     const leadId = active.id as string;
-    const newStatus = over.id as LeadStatus;
-
-    if (!COLUMNS.some(c => c.id === newStatus)) {
-      toast.error("Invalid drop target");
-      return;
-    }
-
     const lead = leads?.find((l) => l.id === leadId);
     if (!lead) return;
+
+    // Find which column was dropped on
+    const overId = over.id as string;
+    let newStatus: LeadStatus | null = null;
+
+    // Check if dropped directly on a column
+    if (COLUMNS.some(c => c.id === overId)) {
+      newStatus = overId as LeadStatus;
+    } else {
+      // Check if dropped on a card in a column - find the column
+      for (const col of COLUMNS) {
+        const columnLeads = getLeadsByStatus(col.id);
+        if (columnLeads.some(l => l.id === overId)) {
+          newStatus = col.id;
+          break;
+        }
+      }
+    }
+
+    if (!newStatus) {
+      return;
+    }
 
     if (lead.status === newStatus) {
       return;
