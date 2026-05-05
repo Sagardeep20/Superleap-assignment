@@ -1,84 +1,121 @@
 # Superleap CRM
 
-A React-based Lead Management CRM application with full CRUD operations, status workflow management, and deep-linkable routing.
+## Overview
+
+A React-based Lead Management CRM application that enables users to manage leads through a complete CRUD interface with enforced status workflow rules. The application supports two views: a traditional list/table view and a Kanban board with drag-and-drop status transitions.
 
 ## Tech Stack
 
-- **Framework: React 19 with Vite** — Fast development experience with HMR, TypeScript support out of the box, and optimized production builds.
-- **State Management: Zustand + TanStack Query** — Zustand manages UI state (filters, dialogs) while TanStack Query handles server state (leads data, caching, invalidation).
-- **Styling: Tailwind CSS + shadcn/ui** — Utility-first CSS for rapid development, shadcn/ui provides accessible, well-designed components (Dialog, Table, Button, etc.).
-- **Mock API: json-server** — Simulates a REST API at localhost:4000 for CRUD operations without a backend.
+- **Framework**: React 19 with Vite — Fast development with hot module replacement and built-in TypeScript support.
 
-## Setup Steps
+- **State Management**: Zustand + TanStack Query — Zustand manages client-side UI state (search queries, filter selections) with minimal boilerplate. TanStack Query handles all server state with built-in caching, deduplication, and automatic invalidation on mutations.
+
+- **Styling**: Tailwind CSS + shadcn/ui — Utility-first CSS for rapid development. shadcn/ui components (Dialog, Table, Button, Select, DropdownMenu) are built on Radix primitives with full accessibility support.
+
+- **Mock API**: json-server (at http://localhost:4000) with Axios as the HTTP client — Simulates a REST backend for CRUD operations without requiring a real backend server.
+
+## Setup
 
 ```bash
-# 1. Install dependencies
 npm install
-
-# 2. Start the mock API server (in a separate terminal)
 npx json-server --watch db.json --port 4000
-
-# 3. Start the development server (in a separate terminal)
 npm run dev
-
-# 4. Open http://localhost:5173
 ```
+
+## Features
+
+- **Lead CRUD**: Create, read, update, and delete leads with a modal-based form
+- **Status Transitions**: Enforced workflow (NEW → CONTACTED → QUALIFIED → CONVERTED, with LOST as terminal from any state)
+- **Search & Filtering**: Client-side search by name/email, filter by status
+- **Kanban Board**: Drag-and-drop cards between status columns using @dnd-kit
+- **Empty/Loading/Error States**: Skeleton loaders, error messages with retry, empty state with clear filters
+- **View/Edit/Delete Actions**: Each row/card has dedicated action buttons
+- **Locked States**: CONVERTED and LOST leads cannot be modified
 
 ## Design Decisions
 
-### Component & State Organization
-- **Components**: Organized by feature (`leads/`), type (`forms/`, `ui/`), and layout (`layout/`).
-- **Server State**: TanStack Query hooks in `src/hooks/useLeads.ts` handle all API calls with proper loading/error states.
-- **UI State**: Zustand store in `src/stores/filterStore.ts` manages client-side search and status filter state.
-- **Form State**: React Hook Form with Zod validation handles all form state locally.
+### Component Organization
 
-### Enforcing Status Rules
-- `src/lib/statusMachine.ts` contains the single source of truth for valid status transitions.
-- `StatusTransitionMenu` component reads from this file to show only valid next statuses.
-- Invalid transitions (CONVERTED → anything, LOST → anything) show a "Locked" state.
-- Status rules are enforced on the client AND should be enforced on the mock server.
+```
+src/
+├── api/          # HTTP client layer (Axios → localhost:4000)
+├── components/
+│   ├── forms/    # LeadForm, DeleteConfirmDialog
+│   ├── leads/    # LeadTable, LeadRow, LeadCard, StatusBadge, StatusTransitionMenu
+│   ├── layout/   # Navbar
+│   └── ui/       # shadcn/ui primitives
+├── hooks/        # TanStack Query hooks
+├── lib/          # Business logic (statusMachine.ts, validators.ts)
+├── pages/        # LeadsPage, BoardPage
+├── stores/       # Zustand store (filterStore.ts)
+└── types/        # TypeScript interfaces
+```
 
-### Drag and Drop Library Choice: @dnd-kit
-I chose **@dnd-kit** over alternatives (react-beautiful-dnd, react-dnd) for the following reasons:
-1. **Modern and maintained** — Actively developed with React 19 support
-2. **Accessible** — Built-in screen reader support and keyboard navigation
-3. **Modular** — Import only what you need (core, sortable, utilities)
-4. **Flexible** — Works with any rendering approach (portal, overlay)
-5. **Lightweight** — No heavy dependencies compared to react-beautiful-dnd
+### State Management
 
-For a Kanban board with sortable cards, dnd-kit's `useSortable` hook provides exactly what's needed with minimal overhead.
+- **Server State**: All API calls wrapped in TanStack Query hooks with `queryKey: ['leads']`. Mutations automatically invalidate queries to trigger refetch.
+
+- **UI State**: Zustand store (`useFilterStore`) maintains `searchQuery` and `selectedStatus` globally. Both list and board views share this state.
+
+- **Form State**: React Hook Form manages form state locally with Zod schema validation.
+
+### Async Logic & Error Handling
+
+- Every mutation uses `mutateAsync` with try/catch blocks
+- Server errors extracted from `error.response?.data?.error` displayed inline in forms
+- Toast notifications (sonner) provide success/error feedback for all async operations
+- Loading states: spinners in buttons, skeleton components during data fetch
+
+### Status Transition Enforcement
+
+- **Single source of truth**: `src/lib/statusMachine.ts` defines `TRANSITIONS` mapping each status to valid next statuses
+- **Table view**: `StatusTransitionMenu` calls `getValidTransitions(lead.status)` to show only valid options in dropdown
+- **Locked UI**: `isTerminal()` checks if transitions array is empty; displays lock icon for CONVERTED/LOST
+
+### Invalid Transition Handling
+
+- **Kanban board**: Drag-and-drop checks `getValidTransitions()` before API call; invalid drops show toast error and card snaps back
+- **Locked leads**: If lead's current status is terminal, no UI allows status change
+- Both dropdown menu and drag-and-drop enforce identical rules
 
 ### Offline Support & Concurrent Edits
-- **Offline**: Would implement optimistic updates with TanStack Query's `onMutate`/`onError` callbacks, storing pending changes in IndexedDB, then syncing when online.
-- **Concurrent Edits**: Would add an `updated_at` timestamp field. On save, compare with server version; if mismatch, show conflict resolution UI letting user choose "Keep Mine" or "Keep Server" version.
+
+- **Offline**: Would use TanStack Query's `onMutate` for optimistic updates, storing pending changes in IndexedDB, then sync when online
+- **Concurrent Edits**: Would add `updated_at` timestamp field; on save, compare timestamps and show conflict resolution UI (Keep Mine / Keep Server)
 
 ### Improvements Given Another Week
-1. Add proper error boundaries with retry UI
-2. Implement optimistic delete with rollback on failure
-3. Add unit tests with Vitest + React Testing Library
-4. Add optimistic updates for drag-and-drop status transitions
-5. Implement proper loading skeletons matching actual content layout
-6. Add keyboard navigation (Escape to close modals, Tab management)
+
+1. Implement optimistic delete with rollback on failure
+2. Add unit tests with Vitest + React Testing Library
+3. Add keyboard navigation (Escape to close modals, Tab management)
+4. Implement error boundaries with retry UI
+5. Add drag-and-drop smooth animations
+
+### Drag and Drop Library: @dnd-kit
+
+Chosen over react-beautiful-dnd and react-dnd for:
+- Modern and actively maintained with React 19 support
+- Built-in accessibility (screen reader, keyboard navigation)
+- Modular imports (core, sortable, utilities)
+- Lightweight with no heavy dependencies
 
 ## AI Usage Note
 
-I used AI tools (OpenCode) throughout this project for:
-- Generating boilerplate components from shadcn/ui
-- Debugging TypeScript errors and understanding type inference
-- Refactoring repeated logic into reusable hooks
-- Implementing dnd-kit drag-and-drop logic
+AI tools were used as an assistant throughout development, not as the primary implementation method. The shadcn/ui component boilerplate was generated via AI to accelerate setup. TypeScript type definitions and @dnd-kit integration patterns were refined with AI assistance.
 
-I accepted AI suggestions for:
-- Initial project structure and component organization
-- TypeScript type definitions and generics
-- CSS utility class combinations
+**Core logic was written manually**: The status machine rules in `statusMachine.ts`, validation schemas in `validators.ts`, and exact API endpoints in `leads.ts` were implemented by hand to ensure exact business rule enforcement. I reviewed and modified all AI suggestions, rejecting over-engineered solutions (e.g., complex routing when simple URL params suffice) and replacing implicit `any` types with proper TypeScript definitions.
 
-I intentionally wrote by hand:
-- The status machine logic in `src/lib/statusMachine.ts` (business logic that defines the lead workflow)
-- Form validation schema in `src/lib/validators.ts` (input validation rules)
-- API layer in `src/api/leads.ts` (exact HTTP methods and endpoints as specified)
+This approach demonstrates critical thinking: using AI for productivity while maintaining ownership of the core business logic.
 
-I rejected AI suggestions that:
-- Added unnecessary dependencies
-- Over-complicated the routing when simple URL params suffice
-- Suggested using `any` types instead of proper TypeScript types
+## Demo Video
+
+👉 [Add Loom link here]
+
+## Additional Requirements
+
+- Clean project structure with single-responsibility components
+- Loading states on every async action (skeletons, spinners)
+- Error states with retry functionality
+- Valid transitions enforced via dropdown and drag-drop
+- Locked states (CONVERTED, LOST) display lock icon and prevent all modifications
+- Semantic HTML: `<table>` for list view, `<button>` for all clickable elements, `<form>` for inputs
