@@ -82,7 +82,7 @@ src/
 ├── lib/                     # Business logic: statusMachine.ts, validators.ts
 ├── pages/                   # LeadsPage (/leads), BoardPage (/board)
 ├── stores/                  # Zustand store: filterStore.ts
-└── types/                   # TypeScript interfaces for Lead, Status, etc.
+└── types/                   # TypeScript interfaces for Lead, Status, etc.)
 ```
 
 ## Design Decisions
