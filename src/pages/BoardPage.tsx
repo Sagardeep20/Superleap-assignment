@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   DndContext,
   DragOverlay,
@@ -94,6 +95,7 @@ export function BoardPage() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { searchQuery, selectedStatus, setSearchQuery, setSelectedStatus, reset } = useFilterStore();
+  const queryClient = useQueryClient();
 
   const { data: leads, isLoading, isError, refetch } = useLeadsQuery();
   const patchStatus = usePatchLeadStatus();
@@ -159,19 +161,15 @@ export function BoardPage() {
       return;
     }
 
-    const leadId = active.id as string;
-    const lead = leads?.find((l) => l.id === leadId);
-    if (!lead) return;
+    const draggedLead = leads?.find((l) => String(l.id) === String(active.id));
+    if (!draggedLead) return;
 
-    // Find which column was dropped on
     const overId = over.id as string;
     let newStatus: LeadStatus | null = null;
 
-    // Check if dropped directly on a column
     if (COLUMNS.some(c => c.id === overId)) {
       newStatus = overId as LeadStatus;
     } else {
-      // Check if dropped on a card in a column - find the column
       for (const col of COLUMNS) {
         const columnLeads = getLeadsByStatus(col.id);
         if (columnLeads.some(l => l.id === overId)) {
@@ -185,28 +183,46 @@ export function BoardPage() {
       return;
     }
 
-    if (lead.status === newStatus) {
+    if (draggedLead.status === newStatus) {
       return;
     }
 
-    const validTransitions = getValidTransitions(lead.status);
-    
+    const validTransitions = getValidTransitions(draggedLead.status);
+
     if (!validTransitions.includes(newStatus)) {
-      toast.error(`Invalid transition: ${lead.status} → ${newStatus}`);
+      toast.error(`Cannot move a ${draggedLead.status} lead to ${newStatus}`);
       return;
     }
 
-    // If current status is terminal, can't change it
-    if (isTerminal(lead.status)) {
+    if (isTerminal(draggedLead.status)) {
       toast.error(`Cannot change status - lead is locked`);
       return;
     }
 
+    const originalStatus = draggedLead.status;
+
+    queryClient.setQueryData(["leads"], (oldLeads: Lead[] | undefined) => {
+      if (!oldLeads) return oldLeads;
+      return oldLeads.map((l) =>
+        String(l.id) === String(active.id)
+          ? { ...l, status: newStatus as LeadStatus }
+          : l
+      );
+    });
+
     try {
-      await patchStatus.mutateAsync({ id: leadId, status: newStatus });
-      toast.success(`Status changed to ${newStatus}`);
+      await patchStatus.mutateAsync({ id: draggedLead.id, status: newStatus as LeadStatus });
+      toast.success(`Lead moved to ${newStatus}`);
     } catch {
-      toast.error("Failed to update status");
+      queryClient.setQueryData(["leads"], (oldLeads: Lead[] | undefined) => {
+        if (!oldLeads) return oldLeads;
+        return oldLeads.map((l) =>
+          String(l.id) === String(active.id)
+            ? { ...l, status: originalStatus }
+            : l
+        );
+      });
+      toast.error("Failed to update lead status. Change reverted.");
     }
   };
 

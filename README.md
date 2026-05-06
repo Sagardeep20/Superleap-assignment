@@ -1,121 +1,105 @@
 # Superleap CRM
 
-## Overview
-
-A React-based Lead Management CRM application that enables users to manage leads through a complete CRUD interface with enforced status workflow rules. The application supports two views: a traditional list/table view and a Kanban board with drag-and-drop status transitions.
+A React-based customer relationship management application built as a frontend intern assessment. The application supports full CRUD operations on leads with enforced business rules for status transitions, along with a Kanban board view for visual pipeline management. Two assessment levels are completed: Level 1 (Core CRUD + Status Rules) and Level 2 (Kanban Board).
 
 ## Tech Stack
 
-- **Framework**: React 19 with Vite — Fast development with hot module replacement and built-in TypeScript support.
+**Framework** — React 19 with Vite provides modern concurrent features and fast development builds with instant hot module replacement.
 
-- **State Management**: Zustand + TanStack Query — Zustand manages client-side UI state (search queries, filter selections) with minimal boilerplate. TanStack Query handles all server state with built-in caching, deduplication, and automatic invalidation on mutations.
+**State Management** — TanStack Query handles all server state (fetching, caching, deduplication, automatic invalidation), while Zustand manages client-side UI state (search query, status filter) with minimal boilerplate. React Hook Form handles form state locally without polluting global state.
 
-- **Styling**: Tailwind CSS + shadcn/ui — Utility-first CSS for rapid development. shadcn/ui components (Dialog, Table, Button, Select, DropdownMenu) are built on Radix primitives with full accessibility support.
+**Styling** — Tailwind CSS enables utility-first styling without context switching. shadcn/ui provides accessible, unstyled components (Dialog, Table, Button, Select, DropdownMenu) built on Radix UI primitives that can be fully customized.
 
-- **Mock API**: json-server (at http://localhost:4000) with Axios as the HTTP client — Simulates a REST backend for CRUD operations without requiring a real backend server.
+**Mock API** — A custom Node.js Express server provided separately by Superleap runs on port 4000 with RESTful endpoints. Axios serves as the HTTP client with a configured base instance, and all API calls are wrapped in TanStack Query hooks.
+
+**Router** — react-router-dom v7 handles /leads and /board routes with full deep-linking support — refreshing on any URL works correctly.
+
+**Drag and Drop** — @dnd-kit provides modular, accessible drag-and-drop functionality for the Kanban board, chosen over alternatives for its active maintenance and React 18+ support.
 
 ## Setup
 
+The application requires two parts running simultaneously:
+
+**Step 1 — Start the mock server**
+
+The mock server is provided separately by Superleap and is not included in this repository. Navigate to the mock server folder, then run:
+
 ```bash
 npm install
-npx json-server --watch db.json --port 4000
+npm start
+```
+
+The server will start on http://localhost:4000.
+
+**Step 2 — Install and start the frontend**
+
+In this repository, run:
+
+```bash
+npm install
 npm run dev
 ```
 
-## Features
+The app will be available at http://localhost:5173
 
-- **Lead CRUD**: Create, read, update, and delete leads with a modal-based form
-- **Status Transitions**: Enforced workflow (NEW → CONTACTED → QUALIFIED → CONVERTED, with LOST as terminal from any state)
-- **Search & Filtering**: Client-side search by name/email, filter by status
-- **Kanban Board**: Drag-and-drop cards between status columns using @dnd-kit
-- **Empty/Loading/Error States**: Skeleton loaders, error messages with retry, empty state with clear filters
-- **View/Edit/Delete Actions**: Each row/card has dedicated action buttons
-- **Locked States**: CONVERTED and LOST leads cannot be modified
+## Project Structure
+
+```text
+src/
+├── api/                     # Axios instance and HTTP functions (leads.ts)
+├── components/
+│   ├── forms/               # LeadForm (create/edit modal), DeleteConfirmDialog
+│   ├── leads/               # LeadTable, LeadRow, LeadCard, StatusBadge, StatusTransitionMenu
+│   ├── layout/              # Navbar
+│   └── ui/                  # shadcn/ui primitives (Button, Dialog, Select, etc.)
+├── hooks/                   # TanStack Query hooks (useLeads, useCreateLead, etc.)
+├── lib/                     # Business logic: statusMachine.ts, validators.ts
+├── pages/                   # LeadsPage (/leads), BoardPage (/board)
+├── stores/                  # Zustand store: filterStore.ts
+└── types/                   # TypeScript interfaces for Lead, Status, etc.
+```
 
 ## Design Decisions
 
-### Component Organization
+### Component, State, and Async Logic
 
-```
-src/
-├── api/          # HTTP client layer (Axios → localhost:4000)
-├── components/
-│   ├── forms/    # LeadForm, DeleteConfirmDialog
-│   ├── leads/    # LeadTable, LeadRow, LeadCard, StatusBadge, StatusTransitionMenu
-│   ├── layout/   # Navbar
-│   └── ui/       # shadcn/ui primitives
-├── hooks/        # TanStack Query hooks
-├── lib/          # Business logic (statusMachine.ts, validators.ts)
-├── pages/        # LeadsPage, BoardPage
-├── stores/       # Zustand store (filterStore.ts)
-└── types/        # TypeScript interfaces
-```
+Server state lives entirely in TanStack Query with queryKey: `['leads']`. Every mutation automatically invalidates this key to trigger a refetch. UI state (searchQuery, selectedStatus) lives in a Zustand store (useFilterStore) so both list and board views share the same filter state without prop drilling. Form state is managed locally by React Hook Form with Zod schema validation, isolated from global state. Components follow single responsibility: LeadRow renders one row, LeadCard renders one kanban card, StatusBadge renders one badge.
 
-### State Management
-
-- **Server State**: All API calls wrapped in TanStack Query hooks with `queryKey: ['leads']`. Mutations automatically invalidate queries to trigger refetch.
-
-- **UI State**: Zustand store (`useFilterStore`) maintains `searchQuery` and `selectedStatus` globally. Both list and board views share this state.
-
-- **Form State**: React Hook Form manages form state locally with Zod schema validation.
-
-### Async Logic & Error Handling
-
-- Every mutation uses `mutateAsync` with try/catch blocks
-- Server errors extracted from `error.response?.data?.error` displayed inline in forms
-- Toast notifications (sonner) provide success/error feedback for all async operations
-- Loading states: spinners in buttons, skeleton components during data fetch
+Every mutation uses mutateAsync inside a try/catch block. Server errors are extracted from `error.response?.data?.error` and displayed inline in the form. Sonner toast notifications show success or error feedback for every async operation. Loading states appear as skeleton components during initial fetch and spinner indicators inside action buttons during mutations. Every async path has explicit loading and error states with retry options.
 
 ### Status Transition Enforcement
 
-- **Single source of truth**: `src/lib/statusMachine.ts` defines `TRANSITIONS` mapping each status to valid next statuses
-- **Table view**: `StatusTransitionMenu` calls `getValidTransitions(lead.status)` to show only valid options in dropdown
-- **Locked UI**: `isTerminal()` checks if transitions array is empty; displays lock icon for CONVERTED/LOST
+A single source of truth — `src/lib/statusMachine.ts` — defines a TRANSITIONS map: NEW → [CONTACTED, LOST], CONTACTED → [QUALIFIED, LOST], QUALIFIED → [CONVERTED, LOST], CONVERTED → [] (terminal), LOST → [] (terminal). The functions `getValidTransitions(status)` returns allowed next statuses and `isTerminal(status)` identifies terminal states.
 
-### Invalid Transition Handling
+In the list view, StatusTransitionMenu calls getValidTransitions() to render only valid options in the dropdown. In the kanban board, on every drag end event, getValidTransitions() is checked before any API call — invalid drop targets cause the card to snap back with a toast error and no network request. On valid drops, the card moves immediately as an optimistic update — if the API call fails, the card reverts to its original column and an error toast explains what happened. For CONVERTED and LOST leads, isTerminal() returns true, a lock icon renders, and no status-change controls appear. Both views use identical statusMachine functions, ensuring rules cannot diverge.
 
-- **Kanban board**: Drag-and-drop checks `getValidTransitions()` before API call; invalid drops show toast error and card snaps back
-- **Locked leads**: If lead's current status is terminal, no UI allows status change
-- Both dropdown menu and drag-and-drop enforce identical rules
+### Offline Support and Concurrent Edits
 
-### Offline Support & Concurrent Edits
+Offline support is not implemented but would use TanStack Query's onMutate callback for optimistic updates, serializing pending changes to IndexedDB. On reconnect, a sync function would replay the queue with per-item error states for failed syncs.
 
-- **Offline**: Would use TanStack Query's `onMutate` for optimistic updates, storing pending changes in IndexedDB, then sync when online
-- **Concurrent Edits**: Would add `updated_at` timestamp field; on save, compare timestamps and show conflict resolution UI (Keep Mine / Keep Server)
+Concurrent edits would add an updated_at timestamp to every lead. On save, the client compares local updated_at against the server response. If they differ, a conflict resolution modal appears with "Keep mine" and "Keep server" options — no silent overwrites.
 
 ### Improvements Given Another Week
 
-1. Implement optimistic delete with rollback on failure
-2. Add unit tests with Vitest + React Testing Library
-3. Add keyboard navigation (Escape to close modals, Tab management)
-4. Implement error boundaries with retry UI
-5. Add drag-and-drop smooth animations
+1. Unit and integration tests with Vitest and React Testing Library — statusMachine.ts and validators.ts are already isolated and easy to test
+2. Keyboard navigation improvements: Escape to close modals, proper Tab order inside dialogs
+3. Error boundaries with per-section retry UI
+4. URL-encoded filter state so a filtered URL like /leads?status=NEW is shareable and survives a hard refresh
 
-### Drag and Drop Library: @dnd-kit
+### Known Trade-offs
 
-Chosen over react-beautiful-dnd and react-dnd for:
-- Modern and actively maintained with React 19 support
-- Built-in accessibility (screen reader, keyboard navigation)
-- Modular imports (core, sortable, utilities)
-- Lightweight with no heavy dependencies
+Filter state (search, status) is shared between /leads and /board via Zustand, persisting within a session but resetting on hard refresh. URL param encoding is listed as a planned improvement above.
+
+Delete uses a loading state rather than optimistic removal, which is the safer choice for a mock API that can return unexpected errors.
+
+## Drag and Drop Library
+
+@dnd-kit was chosen over react-beautiful-dnd (no longer maintained, no React 18+ support) and react-dnd (heavier, more boilerplate). @dnd-kit is modular (core, sortable, utilities), actively maintained, and has built-in keyboard and screen reader accessibility.
 
 ## AI Usage Note
 
-AI tools were used as an assistant throughout development, not as the primary implementation method. The shadcn/ui component boilerplate was generated via AI to accelerate setup. TypeScript type definitions and @dnd-kit integration patterns were refined with AI assistance.
-
-**Core logic was written manually**: The status machine rules in `statusMachine.ts`, validation schemas in `validators.ts`, and exact API endpoints in `leads.ts` were implemented by hand to ensure exact business rule enforcement. I reviewed and modified all AI suggestions, rejecting over-engineered solutions (e.g., complex routing when simple URL params suffice) and replacing implicit `any` types with proper TypeScript definitions.
-
-This approach demonstrates critical thinking: using AI for productivity while maintaining ownership of the core business logic.
+AI tools were used as a productivity assistant, not as the primary author. shadcn/ui component boilerplate was scaffolded with AI to avoid repetitive setup. TypeScript type definitions and @dnd-kit integration patterns were refined with AI assistance. Core logic was written by hand: statusMachine.ts (the transition rules), validators.ts (the Zod schemas), and leads.ts (the API layer) were implemented manually to ensure exact business rule enforcement. Every AI suggestion was reviewed — over-engineered patterns were rejected (for example, a proposed complex middleware layer for status validation was replaced with a simple lookup map). Implicit any types suggested by AI were replaced with proper TypeScript definitions throughout.
 
 ## Demo Video
 
-👉 [Add Loom link here]
-
-## Additional Requirements
-
-- Clean project structure with single-responsibility components
-- Loading states on every async action (skeletons, spinners)
-- Error states with retry functionality
-- Valid transitions enforced via dropdown and drag-drop
-- Locked states (CONVERTED, LOST) display lock icon and prevent all modifications
-- Semantic HTML: `<table>` for list view, `<button>` for all clickable elements, `<form>` for inputs
+👉 [To be added before final submission]
