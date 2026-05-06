@@ -8,7 +8,7 @@ export function Navbar() {
 
   const handleAddLead = () => {
     if (location.pathname.includes("/board")) {
-      navigate("/board?create=true");
+      navigate("/board/new");
     } else {
       navigate("/leads/new");
     }

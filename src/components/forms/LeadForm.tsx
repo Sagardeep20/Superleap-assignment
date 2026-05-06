@@ -27,9 +27,10 @@ interface LeadFormProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   editId?: string | null;
+  redirectTo?: string;
 }
 
-export function LeadForm({ open, onOpenChange, editId }: LeadFormProps) {
+export function LeadForm({ open, onOpenChange, editId, redirectTo = "/leads" }: LeadFormProps) {
   const navigate = useNavigate();
   const params = useParams();
   const editLeadId = editId || params.id;
@@ -92,7 +93,7 @@ export function LeadForm({ open, onOpenChange, editId }: LeadFormProps) {
       }
 
       onOpenChange(false);
-      navigate("/leads");
+      navigate(redirectTo);
     } catch (error: unknown) {
       const err = error as { response?: { data?: { error?: string } } };
       const message = err.response?.data?.error || (isEditing ? "Failed to update lead" : "Failed to create lead");
@@ -103,7 +104,7 @@ export function LeadForm({ open, onOpenChange, editId }: LeadFormProps) {
   const handleClose = (isOpen: boolean) => {
     onOpenChange(isOpen);
     if (!isOpen) {
-      navigate("/leads");
+      navigate(redirectTo);
     }
   };
 

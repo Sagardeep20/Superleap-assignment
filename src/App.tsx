@@ -10,6 +10,7 @@ function App() {
       <Route path="/leads/new" element={<LeadsPage />} />
       <Route path="/leads/:id/edit" element={<LeadsPage />} />
       <Route path="/board" element={<BoardPage />} />
+      <Route path="/board/new" element={<BoardPage />} />
       <Route path="/board/:id/edit" element={<BoardPage />} />
     </Routes>
   );

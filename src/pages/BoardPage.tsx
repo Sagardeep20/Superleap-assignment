@@ -12,7 +12,7 @@ import {
 } from "@dnd-kit/core";
 import type { DragStartEvent, DragEndEvent } from "@dnd-kit/core";
 import { sortableKeyboardCoordinates } from "@dnd-kit/sortable";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams, useLocation, useParams } from "react-router-dom";
 import { toast } from "sonner";
 import { useLeadsQuery, usePatchLeadStatus } from "@/hooks/useLeads";
 import { useFilterStore } from "@/stores/filterStore";
@@ -92,6 +92,8 @@ function Column({
 }
 
 export function BoardPage() {
+  const location = useLocation();
+  const params = useParams();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { searchQuery, selectedStatus, setSearchQuery, setSelectedStatus, reset } = useFilterStore();
@@ -101,12 +103,15 @@ export function BoardPage() {
   const patchStatus = usePatchLeadStatus();
 
   const [activeLead, setActiveLead] = useState<Lead | null>(null);
-  const [showForm, setShowForm] = useState(false);
-  const [editId, setEditId] = useState<string | null>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [leadToDelete, setLeadToDelete] = useState<Lead | null>(null);
   const [viewDialogOpen, setViewDialogOpen] = useState(false);
   const [leadToView, setLeadToView] = useState<Lead | null>(null);
+
+  const isCreateMode = location.pathname === "/board/new";
+  const editId = params.id || null;
+
+  const showForm = Boolean(isCreateMode || editId);
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -232,8 +237,7 @@ export function BoardPage() {
   };
 
   const handleEditClick = (lead: Lead) => {
-    setEditId(lead.id);
-    setShowForm(true);
+    navigate(`/board/${lead.id}/edit`);
   };
 
   const handleDeleteClick = (lead: Lead) => {
@@ -241,10 +245,10 @@ export function BoardPage() {
     setDeleteDialogOpen(true);
   };
 
-  const handleFormClose = () => {
-    setShowForm(false);
-    setEditId(null);
-    navigate("/board");
+  const handleFormOpenChange = (open: boolean) => {
+    if (!open) {
+      navigate("/board");
+    }
   };
 
   if (isLoading) {
@@ -337,7 +341,7 @@ export function BoardPage() {
         </DndContext>
       </div>
 
-      <LeadForm open={showForm} onOpenChange={handleFormClose} editId={editId} />
+      <LeadForm open={showForm} onOpenChange={handleFormOpenChange} editId={editId} redirectTo="/board" />
 
       <DeleteConfirmDialog
         lead={leadToDelete}
